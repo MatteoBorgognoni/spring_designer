@@ -82,7 +82,16 @@ function spring_designer_permission() {
   );
 }
 
-
+/**
+ * @return string Formatted Table with spring attributes
+ * @param string $type 'compression' or 'extension'
+ * @param string $units 'metric' or 'imperial'
+ * @param string $material Material Code 
+ * @param string $diameter_type 'od' (outside), 'id' (inside) or 'md' (mean)
+ * @param float $free_length 
+ * @param float $wire_size
+ * 
+ */
 
 function spring_designer_calculate_attributes($type, $units, $material, $diameter_type, $diameter_value, $free_length, $w_size = NULL, $rating = NULL) {
 
