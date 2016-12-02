@@ -1,0 +1,14 @@
+name = Spring Designer
+description = Allow users to Generate Spring Design
+package = GWS
+core = "7.x"
+version = "7.x-1.0"
+
+files[] = spring_designer.install
+files[] = spring_designer.module
+files[] = spring_designer.admin.inc
+files[] = spring_designer.pages.inc
+
+configure = admin/config/spring-designer
+
+stylesheets[all][] = css/spring_design.css

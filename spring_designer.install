@@ -1,0 +1,21 @@
+ <?php 
+/**
+ * @file
+ * Install, update, and uninstall functions for the Code Login module.
+ */
+
+ /**
+ * Implements hook_schema().
+ */
+function code_login_schema() {
+
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function code_login_uninstall() {
+
+
+
+}

@@ -1,0 +1,399 @@
+<?php
+
+/**
+ * @file
+ * Spring Designer module.
+ */
+
+
+/**
+ * Implements hook_init().
+ */
+function spring_designer_init() {
+
+}
+
+/**
+ * Implements hook_menu().
+ */
+function spring_designer_menu() {
+
+  $items['spring-designs/compression'] = array(
+    'title' => 'Compression Designs',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('spring_designer_form', 1),
+    'access arguments' => array('use spring designer'),
+    'type' => MENU_CALLBACK,
+    'file' => 'spring_designer.pages.inc',
+  );
+
+  $items['spring-designs/extension'] = array(
+    'title' => 'Extension Designs',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('spring_designer_form', 1),
+    'access arguments' => array('use spring designer'),
+    'type' => MENU_CALLBACK,
+    'file' => 'spring_designer.pages.inc',
+  );
+
+  $items['admin/config/spring-designer'] = array(
+    'title' => 'Spring Designer Configuration',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('spring_designer_admin_form'),
+    'access arguments' => array('administer spring designer'),
+    'type' => MENU_NORMAL_ITEM,
+    'weight' => 0,
+    'file' => 'spring_designer.admin.inc',
+  );
+
+  return $items;
+}
+
+
+function spring_designer_theme($existing, $type, $theme, $path) {
+
+    $items['spring_designer_form'] = array(
+        'render element' => 'form',
+        'template' => 'spring-designer-form',
+        'path' => drupal_get_path('module', 'spring_designer') . '/templates',
+    );
+
+    $items['spring_designer_single_form'] = array(
+        'render element' => 'form',
+        'template' => 'spring-designer-single-form',
+        'path' => drupal_get_path('module', 'spring_designer') . '/templates',
+    );
+
+    return $items;
+}
+
+
+/**
+ * Implements hook_permission().
+ */
+function spring_designer_permission() {
+  return array(
+    'administer spring designer' => array(
+      'title' => t('Administer Spring Designer'),
+    ),    
+    'use spring designer' => array(
+      'title' => t('Use Spring Designer'),
+    ),
+  );
+}
+
+
+
+function spring_designer_calculate_attributes($type, $units, $material, $diameter_type, $diameter_value, $free_length, $w_size = NULL, $rating = NULL) {
+
+  // Get Wire Properties from fixed Variables (admin/config/spring-designer) if not in the function call.
+  $wire_sizes = explode(PHP_EOL, variable_get('spring_designer_admin_wire_sizes'));
+
+  if (!is_null($w_size)) {
+    foreach ($wire_sizes as $key => $wire_size) {
+      $element = explode(',', $wire_size);
+      if ($w_size == $element[0]) {
+        $wire_sizes = array($wire_sizes[$key]);
+      }
+    }
+  }
+
+  // Get Solid Ratings properties from fixed Variables (admin/config/spring-designer) if not in the function call.
+  $solid_ratings = explode(PHP_EOL, variable_get('spring_designer_admin_solid_stress'));
+
+  if (!is_null($rating)) {
+    $temp = $solid_ratings[$rating];
+    $solid_ratings = array();
+    $solid_ratings[$rating] = $temp;
+  }
+  // Create container array
+  $available_springs = array();
+
+  // Discern Compression and Extension springs
+  switch ($type) {
+    case 'compression':
+
+      // Iterate Solid ratings
+      foreach ($solid_ratings as $ss_key => $solid_stress) {
+        $solid_stress_info = explode('=', str_replace(' ', '', $solid_stress));
+
+        //Iterate Wire references
+        foreach ($wire_sizes as $ws_key => $wire_info) {
+          
+          $wire = explode(',', $wire_info);
+          $wire_reference = $wire[0];
+          $wire_size = $wire[1];
+
+          // Calculate Diameters
+          switch ($diameter_type) {
+            case 'outside':
+              $od = number_format($diameter_value, 1, '.', '');
+              $md = number_format(($diameter_value - $wire_size), 1, '.', '');
+              $id = number_format(($diameter_value - ($wire_size * 2)), 1, '.', '');
+              break;
+            case 'mean':
+              $od = number_format(($diameter_value + $wire_size), 1, '.', '');
+              $md = number_format($diameter_value, 1, '.', '');
+              $id = number_format(($diameter_value - $wire_size), 1, '.', '');
+              break;
+            case 'inside':
+              $od = number_format(($diameter_value + ($wire_size * 2)), 1, '.', '');
+              $md = number_format(($diameter_value + $wire_size), 1, '.', '');
+              $id = number_format($diameter_value, 1, '.', '');
+              break;
+          }
+
+          // Free Length
+          $fl = number_format($free_length, 1, '.', '');
+
+          // Wire Size
+          $ws = number_format($wire_size, 2, '.', '');
+
+          // Lower Tensile
+          $lt = $material == 'M' ? $wire[3] : $wire[4]; 
+
+          // Solid Stress
+          $ss = $solid_stress_info[1]; // Solid Stress
+
+          // Spring Index
+          $si = $md / $ws;
+          $si = number_format($si, 1, '.', '');
+
+          // Correction Factor
+          $cf = ($si + 0.2) / ($si - 1);
+          $cf = number_format($cf, 1, '.', '');
+ 
+          // Solid Load
+          $sl = (($ss * $lt / 100) * 3.14159 * pow($ws, 3)) / (8 * $md * $cf);
+          $sl= number_format($sl, 1, '.', '');
+          
+          // Number of Coils
+          $nc = ''; 
+            if ($ws < 0.5) {
+              $nc = ((9912.5 * $ws * ($fl - $ws)) + (2 * $sl * pow($si, 3))) / (($sl * pow($si, 3)) + (9912.5 * pow($ws, 2)));
+            } else {
+              $nc = ((9912.5 * $ws * $fl ) + (2 * $sl * pow($si, 3))) / (($sl * pow($si, 3)) + (9912.5 * pow($ws, 2)));          
+            }
+          $nc = number_format($nc, 1, '.', '');
+
+          // Solid Length
+          $sh = ''; 
+            if ($ws < 0.5) {
+              $sh = ($nc + 1) * $ws;
+            } else {
+              $sh = $nc * $ws;
+            }
+          $sh = number_format($sh, 1, '.', '');
+
+          // Spring Rate
+          $sr = '';
+            switch ($material) {
+              case 'M':
+                $sr = (79300 * $ws) / (8 * ($nc - 2) * pow($si, 3));
+                break;
+              case 'S':
+                $sr = (70300 * $ws) / (8 * ($nc - 2) * pow($si, 3));
+                break;
+            }
+          $sr = number_format($sr, 2, '.', '');
+
+
+
+          // Generate Code
+          $code_type = 'FC';
+          $code_free_length_letter = $fl < 50 ? 'A' : 'B';
+          $code_outside_diameter = $od / 0.05;
+          $code_free_length = $code_free_length_letter == 'A' ? $fl / 0.05 : $fl / 0.5;
+          $code_wire_size = $wire_reference;
+          $code_stress_rating = $ss_key + 1;
+          $code_material = $material; 
+
+          $code = $code_type . '-' . $code_free_length_letter . $code_outside_diameter . '-' . $code_free_length . '-' . $code_wire_size . $code_stress_rating . $code_material;
+
+          // Generate Attributes for Add to quote link
+          $attributes = array(
+            'id' => 'add-to-quote-' . $code,
+          ); 
+
+          // generate Query parameters for add to quote ink
+          $query_parameters = array( 
+            'ref' => $code,
+            'type' => 'Compression Springs',
+            'od' => $od,
+            'id' => $id, 
+            'fl' => $fl,
+            'ws' => $ws,
+            'sl' => $sh,
+            'nc' => $nc,
+            'sr' => $sr,
+            'ss' => $solid_stress_info[0]
+          );
+
+          //Generate Add to Quote link
+          $add_to_quote_link = l(t('Request Quote'),'add-to-quotes/spring-designs', array( 'attrbutes' => $attributes, 'query' => $query_parameters, 'html' => TRUE ));
+
+          if (($md / $ws) >= 5 && ($md / $ws) <= 15 && $nc >= 4) {
+
+            $available_springs[$code] = array(
+              'ref' => $code,
+              'od' => $od,
+              'id' => $id,
+              'fl' => $fl,
+              'ws' => $ws,
+              'sl' => $sh,
+              'nc' => $nc,
+              'sr' => $sr,
+              'ss' => $solid_stress_info[0],
+              'add' => $add_to_quote_link,
+            );
+
+          }
+        } // End ForEach wire_sizes
+      } // End ForEach solid_ratings
+
+    break;
+
+    case 'extension':
+
+        foreach ($wire_sizes as $ws_key => $wire_info) {
+          
+          $wire = explode(',', $wire_info);
+          $wire_reference = $wire[0];
+          $wire_size = $wire[1];
+
+
+          // Calculate Diameters
+          $od = number_format($diameter_value, 1, '.', '');
+          $md = number_format(($diameter_value - $wire_size), 1, '.', '');
+          $id = number_format(($diameter_value - ($wire_size * 2)), 1, '.', '');
+
+          // Free Length
+          $fl = number_format($free_length, 1, '.', '');
+
+          // Wire Size
+          $ws = number_format($wire_size, 2, '.', '');
+
+          //Lower Tensile
+          $lt = $material == 'M' ? $wire[3] : $wire[4]; 
+
+          // Spring Index
+          $si = $md / $ws; 
+          $si = number_format($si, 1, '.', '');
+
+          // Correction Factor
+          $cf = ($si + 0.2) / ($si - 1); 
+          $cf = number_format($cf, 1, '.', '');
+
+          // Number of Coils
+          $nc = (($fl - (2 * $md)) / $ws) + 2; 
+          $nc = number_format($nc, 1, '.', '');
+
+          // Initial tension
+          $it = (0.05 * 3.14159 * pow($ws, 3) * $lt) / (8 * $md * $cf);
+          $it = number_format($it, 2, '.', ''); 
+
+          // Spring Rate
+          $sr = ''; 
+            switch ($material) {
+              case 'M':
+                $sr = (79300 * $ws) / (8 * ($nc - 3) * pow($si, 3));
+                break;
+              case 'S':
+                $sr = (70300 * $ws) / (8 * ($nc - 3) * pow($si, 3));
+                break;
+            }
+          $sr = number_format($sr, 2, '.', '');
+
+          // Max Load
+          $ml = number_format((8 * $it), 2, '.', ''); 
+
+          // Max Deflection
+          $mf = number_format(($ml - $it) / $sr, 2, '.', ''); 
+
+          // Max extended Length
+          $mx = number_format($fl + $mf, 1, '.', ''); 
+
+          // Generate Code
+          $code_type = 'FX';
+          $code_free_length_letter = $fl < 50 ? 'T' : 'V';
+          $code_outside_diameter = $od / 0.05;
+          $code_free_length = $code_free_length_letter == 'T' ? $fl / 0.05 : $fl / 0.5;
+          $code_wire_size = $wire_reference;
+          $code_material = $material; 
+
+          $code = $code_type . '-' . $code_free_length_letter . $code_outside_diameter . '-' . $code_free_length . '-' . $code_wire_size . $code_material;
+
+          // Generate Attributes for Add to quote link
+          $attributes = array(
+            'id' => 'add-to-quote-' . $code,
+          ); 
+
+          // Generate Query Parameters for Add to quote link
+          $query_parameters = array( 
+            'ref' => $code,
+            'type' => 'Extension Springs',
+            'od' => $od,
+            'fl' => $fl,
+            'ws' => $ws,
+            'mx' => $mx,
+            'it' => $it,
+            'nc' => $nc,
+            'sr' => $sr 
+          );
+
+          // Generate Add to quote link ( Callback in quote module )
+          $add_to_quote_link = l(t('Add to Quotes'),'add-to-quotes/spring-designs', array( 'attrbutes' => $attributes, 'query' => $query_parameters, 'html' => TRUE ));
+
+          if (($md / $ws) >= 5 && ($md / $ws) <= 13 && $nc >= 4) {
+
+            $available_springs[$code] = array(
+              'ref' => $code,
+              'od' => $od,
+              'fl' => $fl,
+              'ws' => $ws,
+              'mx' => $mx,
+              'it' => $it,
+              'nc' => $nc,
+              'sr' => $sr,
+              'add' => $add_to_quote_link,
+            );
+
+          }
+        } // End ForEach wire_sizes
+
+      break;
+  }
+  $html = !empty($available_springs) ? quote_generate_table($available_springs) : '';
+
+  return $html;
+}
+
+/**
+ * Implements hook_block_info().
+ */
+function spring_designer_block_info() {
+    $blocks['spring_designer_single'] = array(
+      'info' => t('Spring Designer Single'),
+      'title' => '<none>',
+      'visibility' => BLOCK_VISIBILITY_LISTED,
+      'pages' => 'spring-designs/*',
+    );
+    return $blocks;
+}
+
+/**
+ * Implements hook_block_view()
+ */
+function spring_designer_block_view($delta='') {
+
+  $block = array();
+  switch ($delta) {
+      case 'spring_designer_single':
+        $type = arg(1);
+        $block['subject'] = '<none>';
+        $block['content'] = drupal_get_form('spring_designer_single_form', $type);
+      break;
+  }
+  return $block;
+  
+}
